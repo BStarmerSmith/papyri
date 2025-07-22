@@ -1,0 +1,133 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hobbyhelper-frontend/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: hobbyhelper-frontend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd hobbyhelper-frontend
+          npm ci
+      
+      - name: Lint and Test
+        run: |
+          cd hobbyhelper-frontend
+          npm run lint
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/hobbyhelper-frontend
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            latest
+      
+      - name: Create Dockerfile
+        run: |
+          cat > hobbyhelper-frontend/Dockerfile << 'EOF'
+          # Build stage
+          FROM node:18-alpine as build
+          WORKDIR /app
+          COPY package*.json ./
+          RUN npm ci
+          COPY . .
+          RUN npm run build
+
+          # Production stage
+          FROM nginx:alpine
+          COPY --from=build /app/dist /usr/share/nginx/html
+          COPY ./docker/nginx.conf /etc/nginx/conf.d/default.conf
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
+          
+          # Create nginx.conf if it doesn't exist
+          mkdir -p hobbyhelper-frontend/docker
+          cat > hobbyhelper-frontend/docker/nginx.conf << 'EOF'
+          server {
+            listen 80;
+            server_name _;
+            
+            location / {
+              root /usr/share/nginx/html;
+              try_files $uri $uri/ /index.html;
+              add_header Cache-Control "no-store, no-cache, must-revalidate";
+            }
+            
+            location /api/ {
+              proxy_pass http://hobbyhelper-backend:3000;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection 'upgrade';
+              proxy_set_header Host $host;
+              proxy_cache_bypass $http_upgrade;
+            }
+          }
+          EOF
+
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./hobbyhelper-frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Checkout flux repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository_owner }}/papyri
+          ref: main
+          token: ${{ secrets.FLUX_PAT }}
+          path: papyri
+          
+      - name: Update image tag in Flux repository
+        run: |
+          cd papyri
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          IMAGE_TAG="ghcr.io/${{ github.repository_owner }}/hobbyhelper-frontend:sha-$SHORT_SHA"
+          
+          # Update the image tag in the frontend.yaml file
+          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/hobbyhelper-frontend:.*|image: $IMAGE_TAG|" clusters/turing/apps/hobbyhelper/frontend.yaml
+          
+          # Configure Git
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # Commit and push changes
+          git add clusters/turing/apps/hobbyhelper/frontend.yaml
+          git commit -m "Update frontend image to $SHORT_SHA"
+          git push
