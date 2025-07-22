@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apps-placeholder
+  namespace: default
+data:
+  info: "This is a placeholder resource to prevent empty kustomization errors"
