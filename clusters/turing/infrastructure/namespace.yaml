@@ -1,0 +1,15 @@
+# namespaces.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hobbyhelper
+  labels:
+    name: hobbyhelper
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
