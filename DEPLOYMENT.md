@@ -49,7 +49,7 @@ flux bootstrap github \
   --owner=BStarmerSmith \
   --repository=papyri \
   --branch=main \
-  --path=clusters/turing \
+  --path=clusters/talos \
   --personal
 ```
 
@@ -64,7 +64,7 @@ papyri/
 │       ├── backend-ci.yaml
 │       └── frontend-ci.yaml
 ├── clusters/
-│   └── turing/
+│   └── talos/
 │       ├── apps/
 │       │   ├── hobbyhelper/
 │       │   │   ├── backend.yaml

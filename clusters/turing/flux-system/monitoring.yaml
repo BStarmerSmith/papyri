@@ -5,7 +5,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1m0s
-  path: ./clusters/turing/monitoring
+  path: ./clusters/talos/monitoring
   prune: true
   sourceRef:
     kind: GitRepository
