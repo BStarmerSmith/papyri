@@ -3,5 +3,6 @@ kind: Kustomization
 metadata:
   name: infrastructure
 resources:
+  - serviceaccount.yaml
   - namespace.yaml
   - ecr
